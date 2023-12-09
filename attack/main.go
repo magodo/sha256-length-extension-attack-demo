@@ -3,42 +3,86 @@ package main
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"flag"
 	"fmt"
 	"log"
+	"os"
+
+	"github.com/urfave/cli/v2"
 )
 
 var (
-	hashdec = "86d950f4583cdbe4f229c6c193699613a370ae22a2b6ffe899b8c94bfa54c7e4"
-	msg     = "user=magodo"
+	hashdec   string
+	msg       string
+	mfmsg     string
+	secretLen int
 
-	mfmsg = "&role=admin"
-
-	secretLen = 3
+	showMsg  bool
+	showHash bool
 )
 
 func main() {
-	flagShowMsg := flag.Bool("msg", false, "show forged message")
-	flagShowHash := flag.Bool("hash", false, "show forged hash")
-	flag.Parse()
+	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "msg",
+				Usage:       "The legitimate message",
+				Required:    true,
+				Destination: &msg,
+			},
+			&cli.StringFlag{
+				Name:        "hash",
+				Usage:       "The legitimate hash (hex decimal)",
+				Required:    true,
+				Destination: &hashdec,
+			},
+			&cli.StringFlag{
+				Name:        "append",
+				Usage:       "The malformed msg appended to the `msg`",
+				Required:    true,
+				Destination: &mfmsg,
+			},
+			&cli.IntFlag{
+				Name:        "secret-len",
+				Usage:       "The secret length",
+				Required:    true,
+				Destination: &secretLen,
+			},
+			&cli.BoolFlag{
+				Name:        "show-hash",
+				Usage:       "Show the forged hash",
+				Destination: &showHash,
+			},
+			&cli.BoolFlag{
+				Name:        "show-msg",
+				Usage:       "Show the forged msg",
+				Destination: &showMsg,
+			},
+		},
+		Action: func(cCtx *cli.Context) error {
+			hash, err := hex.DecodeString(hashdec)
+			if err != nil {
+				log.Fatal(err)
+			}
+			prevMsgLen := uint64(secretLen) + uint64(len(msg))
+			forgedMsg := msg + string(padding(prevMsgLen)) + mfmsg
 
-	hash, err := hex.DecodeString(hashdec)
-	if err != nil {
+			d := restoreSha256Digest(hash, prevMsgLen+uint64(len(padding(prevMsgLen))))
+			d.Write([]byte(mfmsg))
+			malformedHash := d.Sum(nil)
+
+			if showMsg {
+				fmt.Print(forgedMsg)
+			}
+
+			if showHash {
+				fmt.Print(hex.EncodeToString(malformedHash))
+			}
+			return nil
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
-	}
-	prevMsgLen := uint64(secretLen) + uint64(len(msg))
-	forgedMsg := msg + string(padding(prevMsgLen)) + mfmsg
-
-	d := restoreSha256Digest(hash, prevMsgLen+uint64(len(padding(prevMsgLen))))
-	d.Write([]byte(mfmsg))
-	malformedHash := d.Sum(nil)
-
-	if *flagShowMsg {
-		fmt.Print(forgedMsg)
-	}
-
-	if *flagShowHash {
-		fmt.Print(hex.EncodeToString(malformedHash))
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,11 +34,6 @@ func main() {
 	app := &cli.App{
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "msg",
-				Usage:       "The message to generate MAC for, or verify. Read from stdin if not specified.",
-				Destination: &flagMsg,
-			},
-			&cli.StringFlag{
 				Name:        "secret",
 				Usage:       "The secret used to generate MAC for, or verify",
 				Required:    true,
@@ -47,7 +43,7 @@ func main() {
 		Commands: []*cli.Command{
 			{
 				Name:  "mac",
-				Usage: "Generate MAC for the message",
+				Usage: "Generate MAC for the message (from stdin)",
 				Action: func(cCtx *cli.Context) error {
 					msg, err := readMsg()
 					if err != nil {
@@ -56,14 +52,14 @@ func main() {
 					d := sha256.New()
 					d.Write([]byte(flagSecret + msg))
 
-					fmt.Println("\n" + hex.EncodeToString(d.Sum(nil)))
+					fmt.Print(hex.EncodeToString(d.Sum(nil)))
 
 					return nil
 				},
 			},
 			{
 				Name:  "verify",
-				Usage: "Verify the MAC of a message",
+				Usage: "Verify the MAC of a message (from stdin)",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:        "hash",
@@ -84,10 +80,8 @@ func main() {
 					if err != nil {
 						return err
 					}
-					if subtle.ConstantTimeCompare(expect, actual) == 1 {
-						fmt.Println("\nOK")
-					} else {
-						fmt.Println("\nNOK")
+					if subtle.ConstantTimeCompare(expect, actual) != 1 {
+						return errors.New("invalid hash")
 					}
 					return nil
 				},
